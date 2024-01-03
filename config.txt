@@ -1,15 +1,16 @@
 [NEAT]
 fitness_criterion     = max
-fitness_threshold     = 1000
-pop_size              = 150
+fitness_threshold     = 60
+pop_size              = 100
 reset_on_extinction   = False
 
 [DefaultGenome]
 # Parametros de configuracion para los genomas
-num_inputs = 2
+num_inputs = 6
 num_outputs = 1
 num_hidden = 1
 feed_forward = True
+initial_connection = full_direct
 compatibility_disjoint_coefficient= 1.0
 compatibility_weight_coefficient = 0.6
 conn_add_prob = 0.5
@@ -33,7 +34,8 @@ response_min_value = -30
 mutate_rate_reponse = 0.0
 mutate_rate_aggregation = 0.0
 mutate_rate_activation = 0.0
-activation_default='tansig"
+#clamped
+activation_default= tanh
 activation_mutate_rate = 0.1
 aggregation_mutate_rate = 0.1
 weight_init_mean=0.0
