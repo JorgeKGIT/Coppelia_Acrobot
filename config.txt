@@ -1,78 +1,79 @@
 [NEAT]
-fitness_criterion     = max 
-fitness_threshold     = 60 
-pop_size              = 50 
-reset_on_extinction   = True 
+fitness_criterion     = max
+fitness_threshold     = -65.0
+pop_size              = 200
+reset_on_extinction   = False
 
 [DefaultGenome]
-# Parametros de configuracion para los genomas
-#Neural Network
-num_inputs = 6 
-num_outputs = 1 
-num_hidden = 1 
-# Conexiones solo hacia adelante:
-feed_forward = True 
-initial_connection = full_direct 
-# Compatibility coefficients
-compatibility_disjoint_coefficient= 1.0 
-compatibility_weight_coefficient = 0.6 
+# node activation options
+activation_default      = clamped
+activation_mutate_rate  = 0.0
+activation_options      = clamped
 
-#Connection add/remove rates
-conn_add_prob = 0.5 
-conn_delete_prob = 0.5 
-#Enabled weights to new conections
-enabled_default = True 
-enabled_mutate_rate = 0.01 
+# node aggregation options
+aggregation_default     = sum
+aggregation_mutate_rate = 0.0
+aggregation_options     = sum
 
-#node add/remove rates
-node_add_prob = 0.2 
-node_delete_prob = 0.2 
+# node bias options
+bias_init_mean          = 0.0
+bias_init_stdev         = 1.0
+bias_max_value          = 30.0
+bias_min_value          = -30.0
+bias_mutate_power       = 0.5
+bias_mutate_rate        = 0.7
+bias_replace_rate       = 0.1
 
-# Bias Conf
-bias_init_mean= 0.0 
-bias_init_stdev= 1.0 
-bias_replace_rate = 0.1 
-bias_mutate_power = 0.5 
-bias_mutate_rate = 0.7 
-bias_max_value = 30 
-bias_min_value = -30 
+# genome compatibility options
+compatibility_disjoint_coefficient = 1.0
+compatibility_weight_coefficient   = 0.5
 
-# distribucion de response, activation(bias+(response∗aggregation(inputs)))
-response_init_mean = 1.0 
-response_init_stdev= 0.0 
-response_replace_rate=0.0 
-response_mutate_rate = 0.0 
-response_mutate_power = 0.0 
-response_max_value = 30.0 
-response_min_value = -30 
+# connection add/remove rates
+conn_add_prob           = 0.5
+conn_delete_prob        = 0.3
 
-#Funcion de activacion [-1,1]
-activation_default= tanh 
-activation_options = tanh 
-activation_mutate_rate = 0.0 
-aggregation_mutate_rate = 0.0 
+# connection enable options
+enabled_default         = True
+enabled_mutate_rate     = 0.01
 
-# Weights conf
-weight_init_mean=0.0 
-weight_init_stdev = 1.0 
-weight_replace_rate = 0.1 
-weight_mutate_rate = 0.8 
-weight_mutate_power = 0.5 
-weight_max_value = 30.0 
-weight_min_value =-30.0 
+feed_forward            = False
+initial_connection      = full_nodirect
 
-[DefaultReproduction]
-# Parametros de reproduccion
-# ...
-elitism = 2
-survival_threshold = 0.2
+# node add/remove rates
+node_add_prob           = 0.2
+node_delete_prob        = 0.1
+
+# network parameters
+num_hidden              = 0
+num_inputs              = 6
+num_outputs             = 3
+
+# node response options
+response_init_mean      = 1.0
+response_init_stdev     = 0.0
+response_max_value      = 30.0
+response_min_value      = -30.0
+response_mutate_power   = 0.0
+response_mutate_rate    = 0.0
+response_replace_rate   = 0.0
+
+# connection weight options
+weight_init_mean        = 0.0
+weight_init_stdev       = 1.0
+weight_max_value        = 30
+weight_min_value        = -30
+weight_mutate_power     = 0.5
+weight_mutate_rate      = 0.8
+weight_replace_rate     = 0.1
 
 [DefaultSpeciesSet]
-# Parametros para definir las especies
-# ...
-compatibility_threshold=3.0
+compatibility_threshold = 3.0
 
 [DefaultStagnation]
-# Parametros para la stagnacion
-# ...
-max_stagnation = 10
+species_fitness_func = max
+max_stagnation       = 15
+species_elitism      = 2
+
+[DefaultReproduction]
+elitism            = 2
+survival_threshold = 0.2

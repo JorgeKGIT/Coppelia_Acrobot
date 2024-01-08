@@ -25,6 +25,7 @@ def calcular_pos(robot):
     theta2=robot.get_pos_joint2()
     theta1_r=math.radians(theta1)
     theta2_r=math.radians(theta2)
+    #L1 + 0.025
     L1=dimensions1[0]
     L2=dimensions2[0]
     #print("Informacion: ", L1," ",L2," ",theta1," ",theta2)
@@ -41,7 +42,10 @@ class Coppelia():
         print('*** connecting to coppeliasim')
         client = RemoteAPIClient()
         self.sim = client.getObject('sim')
-
+    def step_time(self):
+        self.sim.setStepping(True)
+    def step(self):
+        self.sim.step()
     def start_simulation(self):
         # print('*** saving environment')
         self.default_idle_fps = self.sim.getInt32Param(self.sim.intparam_idle_fps)
@@ -146,9 +150,12 @@ class Acrobot():
 def calcular_recompensa(distance):
    
     if distance < 0.1:  # Si está muy cerca del objetivo
-        recompensa = 100  # Recompensa alta por alcanzar el objetivo
+        #recompensa = 200  # Recompensa alta por alcanzar el objetivo
+        recompensa=0
     else:
-        recompensa = max(0, (2 - distance) * 10)
+        #recompensa = max(0, (2 - distance) * 10)
+        recompensa=-1
+
     
     return recompensa
 
@@ -172,67 +179,94 @@ def eval_genomes(genomes, config):
         
         total_reward = 0.0
         reward= []
-        #for _ in range(3):  # Ejecutar 5 episodios para evaluar
+        n_steps=3
+        for _ in range(n_steps):  # Ejecutar 5 episodios para evaluar
         # Iniciar la simulación en CoppeliaSim
-        coppelia = Coppelia() # Conectar a CoppeliaSim
-        robot = Acrobot(coppelia.sim, 'Cuboid')
-        coppelia.start_simulation()
-        robot.start_motor()
-        robot.set_joint_torque(0)  
+            coppelia = Coppelia() # Conectar a CoppeliaSim
+            robot = Acrobot(coppelia.sim, 'Cuboid')
+            coppelia.step_time()
+            coppelia.start_simulation()
+            robot.start_motor()
+            robot.set_joint_torque(0)  
+            
+            steps = 0
+            time_near_target = 0  # Contador de tiempo cerca del objetivo
+            estuvo_cerca=False
+            tiempo_sim=20
+            vuelta=False
+            robot.set_joint_torque(0.2)
+            coppelia.step()
+            while (t := coppelia.sim.getSimulationTime()) < tiempo_sim:
+                # Calcular la distancia entre la posición actual y el objetivo
+                distance = 1-calcular_pos(robot)  
+                # Penalización gradual mientras se aleja del objetivo
+                reward.append( calcular_recompensa(distance) )
+
+                '''if coppelia.sim.getSimulationTime()<5:
+                    if( robot.get_pos_joint2_rad()>np.pi*2 or robot.get_pos_joint2_rad()<-np.pi*2):
+                        #print("Ha dado vuelta entera")
+                        vuelta=True
+                        break'''
+                # Ejecutar la red neuronal para obtener la acción
+                # Posicion
+                # Posicion Joint 1
+                # Posicion Joint 2
+                # Velocidad Joint 1 
+                # Velocidad Joint 2
+                # Tiempo
+                ''' pos=calcular_pos(robot)
+                j1=robot.get_pos_joint1_rad()
+                j2=robot.get_pos_joint2_rad()
+                j1_dot=robot.get_velocity_joint1()
+                j2_dot=robot.get_velocity_joint2()  
+                pos_dot=robot.get_velocity_dummy()[1][2]'''
+            
+                j1_cos=np.cos(robot.get_pos_joint1_rad())
+                j1_sin=np.sin(robot.get_pos_joint1_rad())
+                j2_cos=np.cos(robot.get_pos_joint2_rad())
+                j2_sin=np.sin(robot.get_pos_joint2_rad())
+                j1_dot=robot.get_velocity_joint1()
+                j2_dot=robot.get_velocity_joint2() 
+                action = net.activate((j1_cos,j1_sin,j2_cos,j2_sin,j1_dot,j2_dot))  # Los inputs son la distancia y el tiempo cerca del objetivo
+                eval=np.argmax(action)
+                #Aplicar torque negativo
+                if eval==0:
+                    movimiento=-1
+                #No aplicar torque
+                elif eval==1:
+                    movimiento=0
+                #Aplicar torque positivo
+                elif eval==2:
+                    movimiento=1
+                #print("action= ",action)
+                #print(pos,j1,j2,j1_dot,j2_dot,robot.get_velocity_dummy()[1][2])
+                #print("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}".format(pos, j1, j2, j1_dot, j2_dot, pos_dot))
+                robot.set_joint_torque(0.2*movimiento)
+                #torque_guardado=0.2*action[0]
+                # Enviar la acción a CoppeliaSim y avanzar la simulación un paso
+                coppelia.step()
+                # Implementa la lógica para enviar la acción y avanzar la simulación
+            '''if vuelta :
+                total_reward=-100
+            elif sum(reward)<0.05:
+                total_reward=-1000
+            else: '''
+
         
-        steps = 0
-        time_near_target = 0  # Contador de tiempo cerca del objetivo
-        estuvo_cerca=False
-        tiempo_sim=20
-        vuelta=False
-        while (t := coppelia.sim.getSimulationTime()) < tiempo_sim:
-            # Calcular la distancia entre la posición actual y el objetivo
-            distance = 1-calcular_pos(robot)  
-              # Penalización gradual mientras se aleja del objetivo
-            reward.append( calcular_recompensa(distance) )
-            if( robot.get_pos_joint2_rad()>np.pi*2 or robot.get_pos_joint2_rad()<-np.pi*2):
-                #print("Ha dado vuelta entera")
-                vuelta=True
-                break
-            # Ejecutar la red neuronal para obtener la acción
-            # Posicion
-            # Posicion Joint 1
-            # Posicion Joint 2
-            # Velocidad Joint 1 
-            # Velocidad Joint 2
-            # Tiempo
-            pos=calcular_pos(robot)
-            j1=robot.get_pos_joint1_rad()
-            j2=robot.get_pos_joint2_rad()
-            j1_dot=robot.get_velocity_joint1()
-            j2_dot=robot.get_velocity_joint2()  
-            pos_dot=robot.get_velocity_dummy()[1][2]
-            action = net.activate((pos,j1,j2,j1_dot,j2_dot, pos_dot))  # Los inputs son la distancia y el tiempo cerca del objetivo
-            #print("action= ",action)
-            #print(pos,j1,j2,j1_dot,j2_dot,robot.get_velocity_dummy()[1][2])
-            #print("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}".format(pos, j1, j2, j1_dot, j2_dot, pos_dot))
-            robot.set_joint_torque(0.2*action[0])
-            #torque_guardado=0.2*action[0]
-            # Enviar la acción a CoppeliaSim y avanzar la simulación un paso
-            # Implementa la lógica para enviar la acción y avanzar la simulación
-        if vuelta :
-            total_reward=-100
-        elif sum(reward)<0.05:
-            total_reward=-1000
-        else: 
-            total_reward = sum(reward) / len(reward)
+            coppelia.stop_simulation()
+            print("Fin simulacion episodica")
+        contador_genomas+=1
+        total_reward = sum(reward) 
 
         print("Longitud de recompensas: ",len(reward))
         # Detener la simulación después de cada episodio
-        coppelia.stop_simulation()
-        print("Fin simulacion episodica")
-        contador_genomas+=1
         # Calcular la aptitud del genoma basada en la recompensa total
-        genome.fitness = total_reward   # Promedio de las recompensas de los 5 episodios
+        genome.fitness = total_reward/n_steps   # Promedio de las recompensas de los 5 episodios
         print("Fitness: ",genome.fitness," total_reward", total_reward , " sum(reward)", sum(reward))
-    # Cerrar la conexión con CoppeliaSim después de evaluar todos los genomas
-    print("Fin simulacion")
-    coppelia.stop_simulation()
+        # Cerrar la conexión con CoppeliaSim después de evaluar todos los genomas
+        print("Fin simulacion")
+        coppelia.stop_simulation()
+        
 
 
 def test_neat(genome,config):
@@ -240,9 +274,10 @@ def test_neat(genome,config):
     coppelia = Coppelia() # Conectar a CoppeliaSim
     robot = Acrobot(coppelia.sim, 'Cuboid')
     coppelia.start_simulation()
+    coppelia.step_time()
     robot.start_motor()
     robot.set_joint_torque(0)  
-    while (t := coppelia.sim.getSimulationTime()) < 20:
+    while (t := coppelia.sim.getSimulationTime()) < 25:
         distance=1-calcular_pos(robot)
         pos=calcular_pos(robot)
         j1=robot.get_pos_joint1_rad()
@@ -251,20 +286,21 @@ def test_neat(genome,config):
         j2_dot=robot.get_velocity_joint2()
         pos_dot=robot.get_velocity_dummy()[1][2]
         action = net.activate((pos,j1,j2,j1_dot,j2_dot, pos_dot))  # Los inputs son la distancia y el tiempo cerca del objetivo    
-        robot.set_joint_torque(0.2*action[0])        
+        robot.set_joint_torque(0.2*action[0])
+        coppelia.step()        
     coppelia.stop_simulation()
 
 def run_neat(config):
     # Crear la población inicial
     p = neat.Population(config)
-    #p= neat.Checkpointer.restore_checkpoint('neat-checkpoint-49')
+    #p= neat.Checkpointer.restore_checkpoint('neat-checkpoint-299')
     #neat-checkpoint-11
     # Añadir un report para mostrar el progreso
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
     #Para guardar progreso del entrenamiento, cada x iteraciones
-    p.add_reporter(neat.Checkpointer(1))
+    p.add_reporter(neat.Checkpointer(10))
 
     activation_functions = dir(neat.activations)
     print("Funciones de activación disponibles:")
@@ -292,6 +328,6 @@ if __name__ == "__main__":
     config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
                      neat.DefaultSpeciesSet, neat.DefaultStagnation,
                      config_path)  
-    #run_neat(config)
+    run_neat(config)
     test_ai(config)
 
