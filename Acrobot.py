@@ -35,7 +35,7 @@ def calcular_pos(robot):
         theta1+=360'''
     x1,y1=L1*math.sin(theta1_r),-L1*math.cos(theta1_r)
     x2,y2=x1+L2*math.sin(theta2_r+theta1_r),y1-L2*math.cos(theta2_r+theta1_r)
-    return y2
+    return x2,y2
 class Coppelia():
 
     def __init__(self):
@@ -87,8 +87,12 @@ class Acrobot():
         self.joint2_handle = self.sim.getObject(f'/{robot_id}/Acrobot/Joint1/Link1/Joint2')
         self.link1_handle = self.sim.getObject(f'/{robot_id}/Acrobot/Joint1/Link1')
         self.link2_handle = self.sim.getObject(f'/{robot_id}/Acrobot/Joint1/Link1/Joint2/Link2')
-
-
+        self.sim.setObjectFloatParam(self.joint1_handle, sim.jointfloatparam_upper_limit, 4*np.pi)
+        self.sim.setObjectFloatParam(self.joint2_handle, sim.jointfloatparam_upper_limit, 9*np.pi)
+        self.sim.resetDynamicObject(self.joint1_handle)
+        self.sim.resetDynamicObject(self.joint2_handle)
+        self.sim.setJointTargetVelocity(self.joint1_handle,4*np.pi,[])
+        self.sim.setJointTargetVelocity(self.joint2_handle,9*np.pi,[])
     def set_speed(self, speed):
         self.sim.setJointTargetVelocity(self.joint2_handle, speed)
     def set_pos_joint(self,pos):
@@ -149,19 +153,15 @@ class Acrobot():
 
 def calcular_recompensa(distance):
    
-    if distance < 0.1:  # Si está muy cerca del objetivo
-        #recompensa = 200  # Recompensa alta por alcanzar el objetivo
-        recompensa=0
-    else:
-        #recompensa = max(0, (2 - distance) * 10)
-        recompensa=-1
+    recompensa=1/(1+distance)
 
     
     return recompensa
 
 
 import neat
-
+def min_max_normalization(value, min_val, max_val):
+    return (value - min_val) / (max_val - min_val)
 # Función para conectar con CoppeliaSim y evaluar la red neuronal
 def eval_genomes(genomes, config):
     # BORRAR client = b0RemoteApi.RemoteApiClient('b0RemoteApi_pythonClient', 'b0RemoteApi') 
@@ -179,7 +179,7 @@ def eval_genomes(genomes, config):
         
         total_reward = 0.0
         reward= []
-        n_steps=3
+        n_steps=1
         for _ in range(n_steps):  # Ejecutar 5 episodios para evaluar
         # Iniciar la simulación en CoppeliaSim
             coppelia = Coppelia() # Conectar a CoppeliaSim
@@ -192,13 +192,14 @@ def eval_genomes(genomes, config):
             steps = 0
             time_near_target = 0  # Contador de tiempo cerca del objetivo
             estuvo_cerca=False
-            tiempo_sim=20
+            tiempo_sim=10
             vuelta=False
-            robot.set_joint_torque(0.2)
-            coppelia.step()
+            #robot.set_joint_torque(0.2)
+            #coppelia.step()
             while (t := coppelia.sim.getSimulationTime()) < tiempo_sim:
                 # Calcular la distancia entre la posición actual y el objetivo
-                distance = 1-calcular_pos(robot)  
+                x,y=calcular_pos(robot)
+                distance = np.sqrt((0-x)**2 + (1-y)**2)
                 # Penalización gradual mientras se aleja del objetivo
                 reward.append( calcular_recompensa(distance) )
 
@@ -221,13 +222,38 @@ def eval_genomes(genomes, config):
                 j2_dot=robot.get_velocity_joint2()  
                 pos_dot=robot.get_velocity_dummy()[1][2]'''
             
-                j1_cos=np.cos(robot.get_pos_joint1_rad())
-                j1_sin=np.sin(robot.get_pos_joint1_rad())
-                j2_cos=np.cos(robot.get_pos_joint2_rad())
-                j2_sin=np.sin(robot.get_pos_joint2_rad())
-                j1_dot=robot.get_velocity_joint1()
-                j2_dot=robot.get_velocity_joint2() 
-                action = net.activate((j1_cos,j1_sin,j2_cos,j2_sin,j1_dot,j2_dot))  # Los inputs son la distancia y el tiempo cerca del objetivo
+                j1_cos=min_max_normalization(np.cos(robot.get_pos_joint1_rad()),-1,1)
+                j1_sin=min_max_normalization(np.sin(robot.get_pos_joint1_rad()),-1,1)
+                j2_cos=min_max_normalization(np.cos(robot.get_pos_joint2_rad()),-1,1)
+                j2_sin=min_max_normalization(np.sin(robot.get_pos_joint2_rad()),-1,1)
+                j1=robot.get_pos_joint1_rad()
+                j2=robot.get_pos_joint2_rad()
+                while j1<0:
+                    j1+=2*np.pi
+                while j1>2*np.pi:
+                    j1-=2*np.pi
+                while j2<0:
+                    j2+=2*np.pi
+                while j2>2*np.pi:
+                    j2-=2*np.pi
+
+
+                j1_dot_normal=robot.get_velocity_joint1()
+                j2_dot_normal=robot.get_velocity_joint2()
+                if j1_dot_normal>4*np.pi:
+                    print("j11 mayor",j1_dot_normal)
+                if j1_dot_normal<-4*np.pi:
+                    print("j1 menor",j1_dot_normal)
+                if j2_dot_normal>9*np.pi:
+                    print("j2 mayor",j2_dot_normal)
+                if j2_dot_normal<-9*np.pi:
+                    print("j2 menor",j2_dot_normal)         
+                j1_dot=min_max_normalization(j1_dot_normal,-4*np.pi,4*np.pi)
+                j2_dot=min_max_normalization(j2_dot_normal,-9*np.pi,9*np.pi )
+
+                
+                action = net.activate((j1,j2,j1_dot,j2_dot))  # Los inputs son la distancia y el tiempo cerca del objetivo
+                #print((j1,j2,j1_dot,j2_dot))
                 eval=np.argmax(action)
                 #Aplicar torque negativo
                 if eval==0:
@@ -240,8 +266,8 @@ def eval_genomes(genomes, config):
                     movimiento=1
                 #print("action= ",action)
                 #print(pos,j1,j2,j1_dot,j2_dot,robot.get_velocity_dummy()[1][2])
-                #print("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}".format(pos, j1, j2, j1_dot, j2_dot, pos_dot))
-                robot.set_joint_torque(0.2*movimiento)
+                #print("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}".format(j1_cos, j1_sin, j2_cos, j2_sin, j1_dot, j2_dot))
+                robot.set_joint_torque(movimiento)
                 #torque_guardado=0.2*action[0]
                 # Enviar la acción a CoppeliaSim y avanzar la simulación un paso
                 coppelia.step()
@@ -277,23 +303,44 @@ def test_neat(genome,config):
     coppelia.step_time()
     robot.start_motor()
     robot.set_joint_torque(0)  
-    while (t := coppelia.sim.getSimulationTime()) < 25:
-        distance=1-calcular_pos(robot)
-        pos=calcular_pos(robot)
+    while (t := coppelia.sim.getSimulationTime()) < 15:
+        j1_cos=min_max_normalization(np.cos(robot.get_pos_joint1_rad()),-1,1)
+        j1_sin=min_max_normalization(np.sin(robot.get_pos_joint1_rad()),-1,1)
+        j2_cos=min_max_normalization(np.cos(robot.get_pos_joint2_rad()),-1,1)
+        j2_sin=min_max_normalization(np.sin(robot.get_pos_joint2_rad()),-1,1)
         j1=robot.get_pos_joint1_rad()
         j2=robot.get_pos_joint2_rad()
-        j1_dot=robot.get_velocity_joint1()
-        j2_dot=robot.get_velocity_joint2()
-        pos_dot=robot.get_velocity_dummy()[1][2]
-        action = net.activate((pos,j1,j2,j1_dot,j2_dot, pos_dot))  # Los inputs son la distancia y el tiempo cerca del objetivo    
-        robot.set_joint_torque(0.2*action[0])
+        while j1<0:
+            j1+=2*np.pi
+        while j1>2*np.pi:
+            j1-=2*np.pi
+        while j2<0:
+            j2+=2*np.pi
+        while j2>2*np.pi:
+            j2-=2*np.pi       
+        j1_dot=min_max_normalization(robot.get_velocity_joint1(),-4*np.pi,4*np.pi)
+        j2_dot=min_max_normalization(robot.get_velocity_joint2(),-9*np.pi,9*np.pi )
+        
+
+        action = net.activate((j1,j2,j1_dot,j2_dot))  # Los inputs son la distancia y el tiempo cerca del objetivo
+        eval=np.argmax(action)
+        
+        if eval==0:
+            movimiento=-1
+        #No aplicar torque
+        elif eval==1:
+            movimiento=0
+        #Aplicar torque positivo
+        elif eval==2:
+            movimiento=1
+        robot.set_joint_torque(movimiento)
         coppelia.step()        
     coppelia.stop_simulation()
 
 def run_neat(config):
     # Crear la población inicial
     p = neat.Population(config)
-    #p= neat.Checkpointer.restore_checkpoint('neat-checkpoint-299')
+    #p= neat.Checkpointer.restore_checkpoint('neat-checkpoint-127')
     #neat-checkpoint-11
     # Añadir un report para mostrar el progreso
     p.add_reporter(neat.StdOutReporter(True))
@@ -309,8 +356,11 @@ def run_neat(config):
     #Para cargar desde entrenamiento:
     #p= neat.Checkpointer.restore_checkpoint('neat_checkpoint-27')
     # Ejecutar NEAT (reemplaza 50 con el número de generaciones que desees)
-    winner = p.run(eval_genomes, 300)
+    winner = p.run(eval_genomes, 100)
     print("Ganador: ",winner)
+    #visualize.draw_net(config, winner, True)
+    #visualize.plot_stats(stats, ylog=False, view=True)
+    #visualize.plot_species(stats, view=True) 
     #Best genomes:
     with open("best.pickle","wb") as f:
         pickle.dump(winner,f)
@@ -328,6 +378,6 @@ if __name__ == "__main__":
     config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
                      neat.DefaultSpeciesSet, neat.DefaultStagnation,
                      config_path)  
-    run_neat(config)
+    #run_neat(config)
     test_ai(config)
 
